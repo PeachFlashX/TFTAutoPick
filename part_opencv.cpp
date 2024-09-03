@@ -8,6 +8,7 @@ Mat img_starToThree = imread("./res/3.png");
 
 Mat mask_starToTwo;
 Mat mask_starToThree;
+Mat mask_basic;
 
 int screenWidth = GetSystemMetrics(SM_CXSCREEN);
 int screenHeight = GetSystemMetrics(SM_CYSCREEN);
@@ -17,6 +18,10 @@ HWND hwndDesktop = GetDesktopWindow();
 HDC hdcScreen = GetDC(hwndDesktop);
 HDC hdcMem = CreateCompatibleDC(hdcScreen);
 HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, screenWidth, screenHeight);
+
+binary_semaphore seg_basic(1);
+binary_semaphore seg_two(1);
+binary_semaphore seg_three(1);
 
 Mat captureScreen()
 {
@@ -38,7 +43,6 @@ Mat captureScreen()
 Point matchTemplate(const cv::Mat& scene, const cv::Mat& object, bool& flag, Mat& mask)
 {
     Mat result;
-
     matchTemplate(scene, object, result, cv::TM_SQDIFF_NORMED, mask);
 
     double minVal;
@@ -49,13 +53,14 @@ Point matchTemplate(const cv::Mat& scene, const cv::Mat& object, bool& flag, Mat
     minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc, Mat());
 
     matchLoc = minLoc;
-    // cout << minVal << endl;
-    // cout << "star upper" << endl;
-    if (minVal < 0.08f)
+    //cout << minVal;
+    //cout << "star upper" << endl;
+    if (minVal < 0.09f)
+    {
         flag = 1;
+    }
     else
         flag = 0;
-
     return matchLoc;
 }
 
@@ -73,10 +78,14 @@ Point matchTemplate(const cv::Mat& scene, const cv::Mat& object, bool& flag)
     minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc, Mat());
 
     matchLoc = minLoc;
-    // cout << minVal << endl;
-    // cout << "basic" << endl;
+    //cout << minVal;
+    //cout << "basic" << endl;
     if (minVal < 0.1)
+    {
+        imshow("get", scene);
+        waitKey(0);
         flag = 1;
+    }
     else
         flag = 0;
 
@@ -110,6 +119,8 @@ void getMask(const Mat& img, Mat& mask)
 {
     cvtColor(img, mask, COLOR_BGR2GRAY);
     threshold(mask, mask, 40, 255, THRESH_BINARY);
+    //imshow("mask", mask);
+    //waitKey(0);
 }
 
 void opencv_main(bool& open_mode_program, bool& open_mode_all, bool& open_mode_two, bool& open_mode_three)
@@ -121,29 +132,49 @@ void opencv_main(bool& open_mode_program, bool& open_mode_all, bool& open_mode_t
 
     getMask(img_starToTwo, mask_starToTwo);
     getMask(img_starToThree, mask_starToThree);
+    getMask(img_basic, mask_basic);
     Point reji;
     bool flag = 0;
     cv::Rect rect(0, screenHeight / 5 * 4, screenWidth, screenHeight / 5);
 
+    img = captureScreen();
+    img = img(rect);
+    thread pick_basic(pickBasic, ref(open_mode_program), ref(open_mode_all));
+    thread pick_two(pickUpToTwo, ref(open_mode_program), ref(open_mode_all), ref(open_mode_two));
+    thread pick_three(pickUpToThree, ref(open_mode_program), ref(open_mode_all), ref(open_mode_three));
     while (open_mode_program)
     {
-        if (open_mode_all)
-        {
-            img = captureScreen();
-            img = img(rect);
-            //  imshow("Screenshot", img);
-            //  waitKey(0);
-            //     img = imread("./the_map_min.png");
-            flag = 0;
-            reji = matchTemplate(img, img_basic, flag);
-            if (flag)
-            {
-                cout << "basic" << endl;
-                SetCursorPos(reji.x + img_basic.size().width / 2, reji.y + img_basic.size().height / 2 + screenHeight / 5 * 4);
-                mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
-            }
+        img = captureScreen();
+        img = img(rect);
 
+        seg_basic.release();
+        seg_two.release();
+        seg_three.release();
+        Sleep(300);
+    }
+    pick_basic.detach();
+    pick_two.detach();
+    pick_three.detach();
+
+
+    //  imshow("Screenshot", img);
+    //  waitKey(0);
+    //     img = imread("./the_map_min.png");
+
+    // destroyWindow("Screenshot");
+    // system("pause");
+    return;
+}
+
+void pickUpToTwo(bool& open_mode_program, bool& open_mode_all,bool& open_mode_two)
+{
+    bool flag;
+    Point reji;
+    while (open_mode_program)
+    {
+        seg_two.acquire();
+        if (open_mode_all) 
+        {
             if (open_mode_two)
             {
                 flag = 0;
@@ -156,7 +187,19 @@ void opencv_main(bool& open_mode_program, bool& open_mode_all, bool& open_mode_t
                     mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
                 }
             }
+        }
+    }
+}
 
+void pickUpToThree(bool& open_mode_program, bool& open_mode_all,bool& open_mode_three)
+{
+    bool flag;
+    Point reji;
+    while (open_mode_program)
+    {
+        seg_three.acquire();
+        if (open_mode_all)
+        {
             if (open_mode_three)
             {
                 flag = 0;
@@ -171,8 +214,26 @@ void opencv_main(bool& open_mode_program, bool& open_mode_all, bool& open_mode_t
             }
         }
     }
+}
 
-    // destroyWindow("Screenshot");
-    // system("pause");
-    return;
+void pickBasic(bool& open_mode_program, bool& open_mode_all)
+{
+    bool flag;
+    Point reji;
+    while (open_mode_program)
+    {
+        seg_basic.acquire();
+        if (open_mode_all)
+        {
+            flag = 0;
+            reji = matchTemplate(img, img_basic, flag, mask_basic);
+            if (flag)
+            {
+                cout << "basic" << endl;
+                SetCursorPos(reji.x + img_basic.size().width / 2, reji.y + img_basic.size().height / 2 + screenHeight / 5 * 4);
+                mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+            }
+        }
+    }
 }

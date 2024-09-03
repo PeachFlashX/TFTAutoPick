@@ -2,7 +2,6 @@
 #include <thread>
 #include <chrono>
 #include <vector>
-#include <thread>
 #include <windows.h>
 #include <wingdi.h>
 #include "imgui.h"
