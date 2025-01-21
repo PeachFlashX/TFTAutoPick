@@ -22,6 +22,9 @@ HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, screenWidth, screenHeight);
 binary_semaphore seg_basic(1);
 binary_semaphore seg_two(1);
 binary_semaphore seg_three(1);
+binary_semaphore seg_basic_done(0);
+binary_semaphore seg_two_done(0);
+binary_semaphore seg_three_done(0);
 
 Mat captureScreen()
 {
@@ -29,6 +32,7 @@ Mat captureScreen()
     HDC hdcScreen = GetDC(hwndDesktop);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
     HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, screenWidth, screenHeight);
+
     SelectObject(hdcMem, hBitmap);
 
     BitBlt(hdcMem, 0, 0, screenWidth, screenHeight, hdcScreen, 0, 0, SRCCOPY);
@@ -109,8 +113,9 @@ void OpenModeListener(bool& open_mode_program, bool& open_mode_all)
             else
                 cout << "off";
             cout << endl;
-            Sleep(500);
+            Sleep(200);
         }
+        Sleep(50);
     }
     return;
 }
@@ -150,7 +155,10 @@ void opencv_main(bool& open_mode_program, bool& open_mode_all, bool& open_mode_t
         seg_basic.release();
         seg_two.release();
         seg_three.release();
-        Sleep(300);
+
+        seg_basic_done.acquire();
+        seg_two_done.acquire();
+        seg_three_done.acquire();
     }
     pick_basic.detach();
     pick_two.detach();
@@ -188,6 +196,7 @@ void pickUpToTwo(bool& open_mode_program, bool& open_mode_all,bool& open_mode_tw
                 }
             }
         }
+        seg_two_done.release();
     }
 }
 
@@ -213,6 +222,7 @@ void pickUpToThree(bool& open_mode_program, bool& open_mode_all,bool& open_mode_
                 }
             }
         }
+        seg_three_done.release();
     }
 }
 
@@ -235,5 +245,6 @@ void pickBasic(bool& open_mode_program, bool& open_mode_all)
                 mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
             }
         }
+        seg_basic_done.release();
     }
 }
